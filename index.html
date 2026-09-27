@@ -1253,6 +1253,18 @@ body.dark .complaint-status{background:#1c3528;}
 }
 
 </style>
+
+<style>
+/* Highlight sempadan kawasan yang sedang dipilih */
+.webgis-area-highlight-pulse {
+    animation: webgisHighlightPulse 1.5s ease-in-out infinite;
+}
+@keyframes webgisHighlightPulse {
+    0%, 100% { opacity: 0.78; }
+    50% { opacity: 1; }
+}
+</style>
+
 </head>
 
 
@@ -3828,6 +3840,221 @@ body.dark .year-badge{
             ls.addEventListener("change",function(){ setTimeout(updateYearData,20); });
         }
     },400);
+})();
+</script>
+
+
+<script>
+/* =========================================================
+   HIGHLIGHT SEMPADAN IPOH TIMUR / IPOH BARAT
+   Bila kad kawasan diklik, sempadan kawasan yang dipilih
+   akan diserlahkan pada peta.
+========================================================= */
+(function(){
+    let highlightLayer = null;
+    let highlightSource = null;
+
+    function getQgisMap(){
+        try{
+            return (typeof map !== "undefined" && map) ? map : null;
+        }catch(e){
+            return null;
+        }
+    }
+
+    function findAreaLayer(){
+        const m = getQgisMap();
+        if(!m || !m.getLayers) return null;
+
+        let found = null;
+
+        m.getLayers().forEach(function(layer){
+            if(found || !layer || !layer.getSource) return;
+
+            const name = String(
+                layer.get("name") ||
+                layer.get("title") ||
+                layer.get("layerName") ||
+                ""
+            ).toLowerCase();
+
+            if(
+                name.includes("ipohtimordnipohbarat") ||
+                (name.includes("ipoh") && name.includes("timur") && name.includes("barat"))
+            ){
+                found = layer;
+            }
+        });
+
+        return found;
+    }
+
+    function ensureHighlightLayer(){
+        const m = getQgisMap();
+        if(!m || !window.ol) return false;
+
+        if(!highlightLayer){
+            highlightSource = new ol.source.Vector();
+
+            highlightLayer = new ol.layer.Vector({
+                source: highlightSource,
+                zIndex: 9999,
+                style: new ol.style.Style({
+                    fill: new ol.style.Fill({
+                        color: "rgba(255, 193, 7, 0.38)"
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: "#ffd400",
+                        width: 5
+                    })
+                })
+            });
+
+            highlightLayer.set("name", "Kawasan Dipilih");
+            m.addLayer(highlightLayer);
+        }
+
+        return true;
+    }
+
+    function featureMatchesArea(feature, area){
+        if(!feature || !feature.getProperties) return false;
+
+        const props = feature.getProperties();
+        const wanted = area === "barat" ? "barat" : "timur";
+
+        for(const key in props){
+            if(key === "geometry") continue;
+
+            const value = String(props[key] ?? "").toLowerCase();
+            if(
+                value.includes("ipoh " + wanted) ||
+                value.includes("ipoh_" + wanted) ||
+                value.includes("ipoh-" + wanted) ||
+                value === wanted ||
+                value.includes(wanted)
+            ){
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function getAreaFeature(layer, area){
+        if(!layer || !layer.getSource) return null;
+
+        const source = layer.getSource();
+        if(!source || !source.getFeatures) return null;
+
+        const features = source.getFeatures();
+        if(!features.length) return null;
+
+        /* Cuba cari berdasarkan nama/atribut dahulu. */
+        let match = features.find(function(f){
+            return featureMatchesArea(f, area);
+        });
+
+        if(match) return match;
+
+        /*
+         * Jika atribut tidak mempunyai nama kawasan, gunakan
+         * kedudukan geometri: Barat = lebih ke barat,
+         * Timur = lebih ke timur.
+         */
+        if(features.length === 2){
+            const ranked = features.map(function(f){
+                const g = f.getGeometry && f.getGeometry();
+                let x = 0;
+                try{
+                    const c = g && g.getInteriorPoint
+                        ? g.getInteriorPoint().getCoordinates()
+                        : g.getClosestPoint([0,0]);
+                    x = Number(c[0]) || 0;
+                }catch(e){}
+                return {feature:f, x:x};
+            }).sort(function(a,b){ return a.x-b.x; });
+
+            return area === "barat"
+                ? ranked[0].feature
+                : ranked[ranked.length-1].feature;
+        }
+
+        return null;
+    }
+
+    function highlightSelectedArea(){
+        const m = getQgisMap();
+        if(!m || !ensureHighlightLayer()) return;
+
+        const layer = findAreaLayer();
+
+        highlightSource.clear();
+
+        if(!layer){
+            return;
+        }
+
+        const area = (window.selectedArea || localStorage.getItem("webgis-area") || "timur");
+        const feature = getAreaFeature(layer, area);
+
+        if(feature){
+            const clone = feature.clone();
+            highlightSource.addFeature(clone);
+
+            if(typeof showNotification === "function"){
+                showNotification(
+                    area === "barat"
+                        ? "Sempadan Ipoh Barat diserlahkan"
+                        : "Sempadan Ipoh Timur diserlahkan"
+                );
+            }
+        }
+    }
+
+    window.highlightSelectedArea = highlightSelectedArea;
+
+    /*
+     * Panggil semula selepas pemilihan kawasan.
+     * Fungsi asal selectArea kekal digunakan untuk statistik.
+     */
+    const originalSelectArea = window.selectArea;
+    window.selectArea = function(area){
+        if(typeof originalSelectArea === "function"){
+            originalSelectArea(area);
+        }else{
+            window.selectedArea = area === "barat" ? "barat" : "timur";
+            localStorage.setItem("webgis-area", window.selectedArea);
+            if(typeof updateYearData === "function") updateYearData();
+        }
+
+        setTimeout(highlightSelectedArea, 80);
+        setTimeout(highlightSelectedArea, 350);
+    };
+
+    /*
+     * Selepas peta QGIS2Web siap dimuatkan, paparkan
+     * highlight untuk kawasan yang sedang dipilih.
+     */
+    window.addEventListener("load", function(){
+        setTimeout(highlightSelectedArea, 700);
+        setTimeout(highlightSelectedArea, 1600);
+    });
+
+    /*
+     * Jika peta baru sahaja dipindahkan ke halaman Peta Taburan,
+     * cuba highlight semula.
+     */
+    const oldMoveMapContainer = window.moveMapContainer;
+    if(typeof oldMoveMapContainer === "function"){
+        window.moveMapContainer = function(pageId){
+            oldMoveMapContainer(pageId);
+            if(pageId === "map-page"){
+                setTimeout(highlightSelectedArea, 300);
+                setTimeout(highlightSelectedArea, 900);
+            }
+        };
+    }
 })();
 </script>
 
