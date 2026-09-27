@@ -1938,23 +1938,26 @@ body.dark .complaint-status{background:#1c3528;}
     <div class="area-comparison panel" id="areaComparison" aria-live="polite">
         <div class="area-comparison-head">
             <div>
-                <div class="panel-title" id="housingTotalTitle">JUMLAH KES PERUMAHAN</div>
-                <div class="housing-total"><strong id="housingTotalCases">434</strong> <span class="area-case-unit">kes</span></div>
+                <div class="panel-title" id="housingTotalTitle">JUMLAH KES</div>
+                <div class="housing-total"><strong id="housingTotalCases">617</strong> <span class="area-case-unit">kes</span></div>
                 <div class="page-subtitle" id="areaComparisonSubtitle">Kes mengikut kawasan bagi tahun 2025</div>
             </div>
             <span class="year-badge" id="areaComparisonYear">2025</span>
         </div>
         <div class="area-comparison-grid">
-            <article class="area-card area-card-selatan">
+            <article class="area-card area-card-selatan selected" id="areaCardTimur" role="button" tabindex="0" aria-pressed="true" onclick="selectArea('timur')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectArea('timur')}">
                 <span class="area-name">Ipoh Timur</span>
                 <strong id="ipohSelatanCases">372</strong>
                 <small class="area-case-unit">kes</small>
             </article>
-            <article class="area-card area-card-barat">
+            <article class="area-card area-card-barat" id="areaCardBarat" role="button" tabindex="0" aria-pressed="false" onclick="selectArea('barat')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectArea('barat')}">
                 <span class="area-name">Ipoh Barat</span>
                 <strong id="ipohBaratCases">245</strong>
                 <small class="area-case-unit">kes</small>
             </article>
+        </div>
+        <div class="page-subtitle" id="areaSelectionHint" style="margin-top:10px;">
+            Klik Ipoh Timur atau Ipoh Barat untuk melihat pecahan kes mengikut jenis premis.
         </div>
     </div>
 
@@ -3311,7 +3314,10 @@ body.dark .map-case-label span{color:#67c2ff;}
 .housing-total{display:flex;align-items:baseline;gap:6px;margin-top:5px;color:#1687c9;}
 .housing-total strong{font-size:31px;line-height:1;}
 .housing-total span{font-size:12px;font-weight:700;}
-.area-card{border-radius:10px;padding:13px 16px;color:#fff;display:grid;grid-template-columns:1fr auto;align-items:end;gap:2px 10px;}
+.area-card{border-radius:10px;padding:13px 16px;color:#fff;display:grid;grid-template-columns:1fr auto;align-items:end;gap:2px 10px;cursor:pointer;transition:.2s;position:relative;user-select:none;}
+.area-card:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(17,42,61,.14);}
+.area-card.selected{outline:3px solid #1687c9;outline-offset:2px;box-shadow:0 7px 18px rgba(22,135,201,.22);}
+.area-card.selected::after{content:"Dipilih";position:absolute;right:10px;top:8px;font-size:9px;font-weight:700;padding:3px 6px;border-radius:10px;background:rgba(255,255,255,.22);color:inherit;}
 .area-card-selatan{background:linear-gradient(135deg,#0e6597,#1687c9);color:#ffffff;}
 .area-card-barat{background:linear-gradient(135deg,#f8fbfd,#ffffff);color:#233746;border:1px solid #d8e3ea;}
 .area-card-barat .area-name,
@@ -3423,6 +3429,20 @@ body.dark .year-badge{
         "2026": {barat:57, selatan:71}
     };
 
+    /* Pecahan jenis premis mengikut kawasan dan tahun, berdasarkan CSV 2025 dan 2026. */
+    window.WEBGIS_AREA_PREMISE_DATA = {
+        "2025": {
+            timur: {rumah:251, kedai:41, masjid:3, lain:77, total:372},
+            barat: {rumah:183, kedai:24, masjid:3, lain:35, total:245}
+        },
+        "2026": {
+            timur: {rumah:61, kedai:6, masjid:0, lain:4, total:71},
+            barat: {rumah:25, kedai:5, masjid:1, lain:26, total:57}
+        }
+    };
+
+    let selectedArea = localStorage.getItem("webgis-area") || "timur";
+
     const monthOrder=["JANUARI","FEBRUARI","MAC","APRIL","MEI","JUN","JULAI","OGOS","SEPTEMBER","OKTOBER","NOVEMBER","DISEMBER"];
     const monthShort={JANUARI:"JAN",FEBRUARI:"FEB",MAC:"MAC",APRIL:"APR",MEI:"MEI",JUN:"JUN",JULAI:"JUL",OGOS:"OGOS",SEPTEMBER:"SEP",OKTOBER:"OKT",NOVEMBER:"NOV",DISEMBER:"DIS"};
 
@@ -3508,6 +3528,46 @@ body.dark .year-badge{
         const t=selectedTotals(); return t.rumah+t.kedai+t.masjid+t.lain;
     }
 
+    function getSelectedAreaPremise(){
+        const y=currentYear();
+        const source = window.WEBGIS_AREA_PREMISE_DATA || {};
+        if(y==="all"){
+            return ["2025","2026"].reduce((sum,year)=>{
+                const row=(source[year]||{})[selectedArea];
+                if(!row) return sum;
+                sum.rumah+=row.rumah; sum.kedai+=row.kedai; sum.masjid+=row.masjid; sum.lain+=row.lain;
+                sum.total+=row.total;
+                return sum;
+            },{rumah:0,kedai:0,masjid:0,lain:0,total:0});
+        }
+        return ((source[y]||{})[selectedArea]) || {rumah:0,kedai:0,masjid:0,lain:0,total:0};
+    }
+
+    function selectArea(area){
+        selectedArea = (area==="barat") ? "barat" : "timur";
+        localStorage.setItem("webgis-area", selectedArea);
+        updateYearData();
+    }
+
+    window.selectArea=selectArea;
+
+    function updateAreaSelectionUI(){
+        const timur=document.getElementById("areaCardTimur");
+        const barat=document.getElementById("areaCardBarat");
+        const isTimur=selectedArea==="timur";
+        if(timur){
+            timur.classList.toggle("selected",isTimur);
+            timur.setAttribute("aria-pressed",String(isTimur));
+        }
+        if(barat){
+            barat.classList.toggle("selected",!isTimur);
+            barat.setAttribute("aria-pressed",String(!isTimur));
+        }
+        const hint=document.getElementById("areaSelectionHint");
+        const year=currentYear()==="all"?"2025 + 2026":currentYear();
+        if(hint) hint.textContent="Dipilih: "+(isTimur?"Ipoh Timur":"Ipoh Barat")+" — pecahan kes mengikut jenis premis bagi "+year+".";
+    }
+
     function selectedAreaTotals(){
         const y=currentYear();
         if(y!=="all") return WEBGIS_AREA_DATA[y] || {barat:0,selatan:0};
@@ -3522,12 +3582,12 @@ body.dark .year-badge{
         const y=currentYear()==="all"?"2025 + 2026":currentYear();
         const lang=document.documentElement.lang||"ms";
         const copy={
-            ms:{title:"JUMLAH KES PERUMAHAN",subtitle:"Kes mengikut kawasan bagi tahun ",unit:"kes"},
-            en:{title:"TOTAL HOUSING CASES",subtitle:"Cases by area for ",unit:"cases"},
-            zh:{title:"住宅案件总数",subtitle:"各地区案件：",unit:"宗案件"}
+            ms:{title:"JUMLAH KES",subtitle:"Jumlah kes mengikut kawasan bagi tahun ",unit:"kes"},
+            en:{title:"TOTAL CASES",subtitle:"Total cases by area for ",unit:"cases"},
+            zh:{title:"案件总数",subtitle:"各地区案件：",unit:"宗案件"}
         }[lang]||null;
         const text=copy||{
-            title:"JUMLAH KES PERUMAHAN",subtitle:"Kes mengikut kawasan bagi tahun ",unit:"kes"
+            title:"JUMLAH KES",subtitle:"Jumlah kes mengikut kawasan bagi tahun ",unit:"kes"
         };
         const west=document.getElementById("ipohBaratCases"), south=document.getElementById("ipohSelatanCases");
         if(west) west.textContent=data.barat;
@@ -3536,11 +3596,13 @@ body.dark .year-badge{
         const housingTotal=document.getElementById("housingTotalCases");
         const subtitle=document.getElementById("areaComparisonSubtitle");
         const badge=document.getElementById("areaComparisonYear");
+        const areaPremise=getSelectedAreaPremise();
         if(title) title.textContent=text.title;
-        if(housingTotal) housingTotal.textContent=selectedTotals().rumah;
+        if(housingTotal) housingTotal.textContent=areaPremise.total;
         if(subtitle) subtitle.textContent=text.subtitle+y;
         if(badge) badge.textContent=y;
         document.querySelectorAll(".area-case-unit").forEach(el=>el.textContent=text.unit);
+        updateAreaSelectionUI();
     }
 
     function updateYearLabels(){
@@ -3628,7 +3690,8 @@ body.dark .year-badge{
     }
 
     function updatePremise(){
-        const t=selectedTotals(), total=Math.max(selectedTotal(),1);
+        const t=getSelectedAreaPremise(), total=Math.max(t.total,1);
+        const areaName=selectedArea==="timur"?"Ipoh Timur":"Ipoh Barat";
         const cards=document.querySelectorAll("#jenis-page .stats .stat-card");
         const vals=[["RUMAH",t.rumah],["KEDAI",t.kedai],["MASJID/KUIL/TOKONG",t.masjid],["LAIN-LAIN",t.lain]];
         cards.forEach((card,i)=>{
@@ -3668,8 +3731,8 @@ body.dark .year-badge{
         const title=document.getElementById("premisePieTitle");
         const subtitle=document.getElementById("premisePieSubtitle");
         const badge=document.getElementById("premisePieYear");
-        if(title) title.textContent=text.title;
-        if(subtitle) subtitle.textContent=text.subtitle+year;
+        if(title) title.textContent=text.title+" — "+areaName;
+        if(subtitle) subtitle.textContent=text.subtitle+areaName+" ("+year+")";
         if(badge) badge.textContent=year;
         if(legend){
             legend.innerHTML=numbers.map((value,i)=>`<div class="premise-pie-item"><span class="premise-pie-swatch" style="background:${colors[i]}"></span><span class="premise-pie-label">${text.labels[i]}</span><span class="premise-pie-value"><strong>${value}</strong>${(value/total*100).toFixed(1)}%</span></div>`).join("");
@@ -3714,12 +3777,7 @@ body.dark .year-badge{
     }
 
     function mapCaseTotals(){
-        const y=currentYear();
-        const rows=y==="all" ? getCombined() : getData(y);
-        return rows.reduce((a,r)=>{
-            a.rumah+=r.rumah; a.kedai+=r.kedai; a.masjid+=r.masjid; a.lain+=r.lain;
-            return a;
-        },{rumah:0,kedai:0,masjid:0,lain:0});
+        return getSelectedAreaPremise();
     }
 
     function updateMapCaseLabels(){
@@ -3728,12 +3786,15 @@ body.dark .year-badge{
         const y=currentYear();
         const yearText=y==="all"?"2025 + 2026":y;
         const t=mapCaseTotals();
+        const areaName=selectedArea==="timur"?"Ipoh Timur":"Ipoh Barat";
         labels.innerHTML=`
+            <div class="map-case-label" style="border-left-color:#1687c9"><strong>${areaName}</strong><span>${yearText}</span></div>
             <div class="map-case-label" data-label-key="rumah"><strong>Rumah</strong><span>${t.rumah} kes</span></div>
             <div class="map-case-label" data-label-key="kedai"><strong>Kedai</strong><span>${t.kedai} kes</span></div>
             <div class="map-case-label" data-label-key="masjid"><strong>Masjid/Kuil/Tokong</strong><span>${t.masjid} kes</span></div>
             <div class="map-case-label" data-label-key="lain"><strong>Lain-lain</strong><span>${t.lain} kes</span></div>`;
         labels.dataset.year=yearText;
+        labels.dataset.area=selectedArea;
     }
 
     function updateYearData(){
