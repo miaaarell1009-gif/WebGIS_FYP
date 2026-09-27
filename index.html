@@ -1265,6 +1265,61 @@ body.dark .complaint-status{background:#1c3528;}
 }
 </style>
 
+
+<style id="webgis-search-enhancement">
+.search-box{position:relative;}
+.search-results{
+    position:absolute;
+    top:calc(100% + 7px);
+    left:0;
+    right:0;
+    z-index:10050;
+    display:none;
+    max-height:280px;
+    overflow:auto;
+    background:var(--card,#fff);
+    border:1px solid var(--border,#d8e3ea);
+    border-radius:10px;
+    box-shadow:0 10px 28px rgba(0,0,0,.18);
+}
+.search-results.show{display:block;}
+.search-result-item{
+    width:100%;
+    border:0;
+    background:transparent;
+    text-align:left;
+    padding:11px 12px;
+    cursor:pointer;
+    color:var(--text,#233746);
+    font-size:12px;
+    line-height:1.35;
+}
+.search-result-item:hover,
+.search-result-item:focus{
+    background:rgba(22,135,201,.10);
+    outline:none;
+}
+.search-result-item strong{display:block;font-size:12px;}
+.search-result-item span{display:block;color:var(--muted,#71808c);font-size:10px;margin-top:3px;}
+.search-result-empty{
+    padding:12px;
+    color:var(--muted,#71808c);
+    font-size:11px;
+}
+.search-pin{
+    width:18px;
+    height:18px;
+    border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    background:#e53935;
+    border:3px solid #fff;
+    box-shadow:0 2px 9px rgba(0,0,0,.35);
+}
+@media(max-width:700px){
+    .search-results{left:-25px;right:-25px;}
+}
+</style>
+
 </head>
 
 
@@ -1303,6 +1358,7 @@ body.dark .complaint-status{background:#1c3528;}
                 type="text"
                 id="searchInput"
                 placeholder="Cari kawasan...">
+            <div id="searchResults" class="search-results" role="listbox" aria-label="Hasil carian kawasan"></div>
         </div>
 
         <button
@@ -3207,32 +3263,287 @@ window.addEventListener("load",function(){
 });
 
 /* =====================================================
-   SEARCH
+   SEARCH KAWASAN - PHOTON GEOCODER
+   Cari tempat seperti Taman Canning / Taman Cempaka,
+   paparkan hasil carian dan zoom terus ke lokasi.
 ===================================================== */
 
-document
-    .getElementById("searchInput")
-    .addEventListener(
-        "keydown",
-        function(event){
+(function(){
 
-            if(event.key === "Enter"){
+    const input = document.getElementById("searchInput");
+    const resultsBox = document.getElementById("searchResults");
 
-                const value =
-                    this.value.trim();
+    if(!input || !resultsBox) return;
 
-                if(value){
+    let searchTimer = null;
+    let searchMarkerLayer = null;
+    let lastResults = [];
 
-                    showNotification(
-                        "Mencari kawasan: " + value
+    function getMap(){
+        try{
+            return (typeof map !== "undefined" && map) ? map : null;
+        }catch(e){
+            return null;
+        }
+    }
+
+    function escapeHtml(value){
+        return String(value ?? "")
+            .replace(/&/g,"&amp;")
+            .replace(/</g,"&lt;")
+            .replace(/>/g,"&gt;")
+            .replace(/"/g,"&quot;")
+            .replace(/'/g,"&#039;");
+    }
+
+    function clearSearchResults(){
+        resultsBox.innerHTML = "";
+        resultsBox.classList.remove("show");
+        lastResults = [];
+    }
+
+    function ensureSearchMarkerLayer(){
+        const m = getMap();
+        if(!m || !window.ol) return null;
+
+        if(searchMarkerLayer) return searchMarkerLayer;
+
+        const source = new ol.source.Vector();
+
+        searchMarkerLayer = new ol.layer.Vector({
+            source: source,
+            zIndex: 10001,
+            style: new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 8,
+                    fill: new ol.style.Fill({color:"#e53935"}),
+                    stroke: new ol.style.Stroke({color:"#ffffff",width:3})
+                })
+            })
+        });
+
+        searchMarkerLayer.set("name","Lokasi Carian");
+        m.addLayer(searchMarkerLayer);
+
+        return searchMarkerLayer;
+    }
+
+    function showSearchMarker(lon, lat, label){
+        const m = getMap();
+
+        if(!m || !window.ol || !window.ol.proj){
+            showNotification("Peta belum bersedia. Cuba lagi.");
+            return;
+        }
+
+        const layer = ensureSearchMarkerLayer();
+        if(!layer) return;
+
+        const source = layer.getSource();
+        source.clear();
+
+        const coordinate = ol.proj.fromLonLat([
+            Number(lon),
+            Number(lat)
+        ]);
+
+        const feature = new ol.Feature({
+            geometry: new ol.geom.Point(coordinate),
+            searchLabel: label
+        });
+
+        source.addFeature(feature);
+
+        const view = m.getView();
+
+        view.animate({
+            center: coordinate,
+            zoom: Math.max(Number(view.getZoom()) || 10, 15),
+            duration: 900
+        });
+
+        showNotification("Lokasi ditemui: " + label);
+    }
+
+    function resultLabel(feature){
+        const p = feature.properties || {};
+
+        const primary =
+            p.name ||
+            p.street ||
+            p.city ||
+            p.county ||
+            "Lokasi";
+
+        const parts = [
+            p.street,
+            p.district,
+            p.city,
+            p.state,
+            p.country
+        ].filter(function(v){
+            return v && String(v).toLowerCase() !== String(primary).toLowerCase();
+        });
+
+        return {
+            title: primary,
+            subtitle: parts.slice(0,3).join(", ")
+        };
+    }
+
+    function renderResults(features){
+        lastResults = features || [];
+        resultsBox.innerHTML = "";
+
+        if(!features || !features.length){
+            resultsBox.innerHTML =
+                '<div class="search-result-empty">Kawasan tidak dijumpai. Cuba nama kawasan yang lebih lengkap, contohnya "Taman Canning, Ipoh".</div>';
+            resultsBox.classList.add("show");
+            return;
+        }
+
+        features.forEach(function(feature,index){
+
+            const info = resultLabel(feature);
+
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "search-result-item";
+            button.setAttribute("role","option");
+
+            button.innerHTML =
+                "<strong>" + escapeHtml(info.title) + "</strong>" +
+                "<span>" + escapeHtml(info.subtitle || "Ipoh, Perak") + "</span>";
+
+            button.addEventListener("click",function(){
+
+                const coords = feature.geometry && feature.geometry.coordinates;
+
+                if(coords && coords.length >= 2){
+                    input.value = info.title;
+                    showSearchMarker(
+                        coords[0],
+                        coords[1],
+                        info.title
                     );
-
                 }
 
+                clearSearchResults();
+            });
+
+            resultsBox.appendChild(button);
+        });
+
+        resultsBox.classList.add("show");
+    }
+
+    async function searchPlace(query){
+
+        const clean = query.trim();
+
+        if(clean.length < 2){
+            clearSearchResults();
+            return;
+        }
+
+        resultsBox.innerHTML =
+            '<div class="search-result-empty">Mencari kawasan...</div>';
+        resultsBox.classList.add("show");
+
+        try{
+
+            /*
+             * Bias carian ke Ipoh supaya nama taman yang sama
+             * di tempat lain tidak mudah terpilih.
+             */
+            const url =
+                "https://photon.komoot.io/api/?" +
+                "q=" + encodeURIComponent(clean + ", Ipoh, Perak, Malaysia") +
+                "&limit=6" +
+                "&lang=en" +
+                "&lat=4.5975" +
+                "&lon=101.0901";
+
+            const response = await fetch(url, {
+                headers: {
+                    "Accept":"application/json"
+                }
+            });
+
+            if(!response.ok){
+                throw new Error("Search request failed");
             }
 
+            const data = await response.json();
+
+            const features = (data.features || []).filter(function(feature){
+                const p = feature.properties || {};
+                const text = JSON.stringify(p).toLowerCase();
+
+                return (
+                    text.includes("ipoh") ||
+                    text.includes("perak") ||
+                    text.includes("malaysia")
+                );
+            });
+
+            renderResults(features);
+
+        }catch(error){
+
+            console.error("Carian kawasan gagal:", error);
+
+            resultsBox.innerHTML =
+                '<div class="search-result-empty">Carian tidak dapat dilakukan sekarang. Semak sambungan internet dan cuba lagi.</div>';
+            resultsBox.classList.add("show");
         }
-    );
+    }
+
+    input.addEventListener("input",function(){
+
+        clearTimeout(searchTimer);
+
+        const value = this.value.trim();
+
+        if(value.length < 2){
+            clearSearchResults();
+            return;
+        }
+
+        searchTimer = setTimeout(function(){
+            searchPlace(value);
+        },450);
+    });
+
+    input.addEventListener("keydown",function(event){
+
+        if(event.key === "Enter"){
+
+            event.preventDefault();
+
+            clearTimeout(searchTimer);
+
+            const value = this.value.trim();
+
+            if(value){
+                searchPlace(value);
+            }
+        }
+
+        if(event.key === "Escape"){
+            clearSearchResults();
+        }
+    });
+
+    document.addEventListener("click",function(event){
+
+        if(!event.target.closest(".search-box")){
+            resultsBox.classList.remove("show");
+        }
+
+    });
+
+})();
 
 
 /* =====================================================
