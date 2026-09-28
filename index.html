@@ -3079,6 +3079,67 @@ function toggleSidebar(){
 }
 
 
+
+/* =====================================================
+   MOBILE SWIPE SIDEBAR
+   Swipe right from the left edge to open.
+   Swipe left on the open sidebar to close.
+===================================================== */
+(function(){
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchTracking = false;
+    const EDGE_ZONE = 35;
+    const SWIPE_DISTANCE = 60;
+
+    document.addEventListener("touchstart", function(e){
+        if(window.innerWidth > 750 || !e.touches || !e.touches.length) return;
+
+        const sidebar = document.getElementById("sidebar");
+        if(!sidebar) return;
+
+        const x = e.touches[0].clientX;
+        const y = e.touches[0].clientY;
+        const isOpen = sidebar.classList.contains("mobile-show");
+        const startedInsideSidebar = sidebar.contains(e.target);
+
+        // Sidebar closed: start only from the left edge.
+        // Sidebar open: start from anywhere inside the sidebar.
+        if((!isOpen && x <= EDGE_ZONE) || (isOpen && startedInsideSidebar)){
+            touchStartX = x;
+            touchStartY = y;
+            touchTracking = true;
+        }else{
+            touchTracking = false;
+        }
+    }, {passive:true});
+
+    document.addEventListener("touchend", function(e){
+        if(!touchTracking || window.innerWidth > 750 || !e.changedTouches.length) return;
+
+        const sidebar = document.getElementById("sidebar");
+        if(!sidebar) return;
+
+        const endX = e.changedTouches[0].clientX;
+        const endY = e.changedTouches[0].clientY;
+        const dx = endX - touchStartX;
+        const dy = endY - touchStartY;
+        const isOpen = sidebar.classList.contains("mobile-show");
+
+        touchTracking = false;
+
+        // Ignore normal vertical page scrolling.
+        if(Math.abs(dx) < SWIPE_DISTANCE || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+
+        if(!isOpen && dx > 0){
+            sidebar.classList.add("mobile-show");
+        }else if(isOpen && dx < 0){
+            sidebar.classList.remove("mobile-show");
+        }
+    }, {passive:true});
+})();
+
+
 /* =====================================================
    SETTINGS
 ===================================================== */
@@ -4202,6 +4263,13 @@ body.dark .year-badge{
 
     .map-dashboard{
         height:300px;
+    }
+}
+
+@media(max-width:750px){
+    .sidebar{
+        touch-action:pan-y;
+        will-change:transform;
     }
 }
 </style>
