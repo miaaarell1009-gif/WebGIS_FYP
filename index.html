@@ -954,9 +954,11 @@ input{
 
     font-size:12px;
 }
-.clear-search-btn{border:0;background:transparent;color:#8c99a4;width:28px;height:28px;padding:0;margin-left:2px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%;flex:0 0 28px;}
-.clear-search-btn:hover{background:#eef2f5;color:#d32f2f;}
-.clear-search-btn:active{background:#e3e8ec;}
+.clear-search-btn{border:0;background:#eef2f5;color:#65737e;width:25px;height:25px;padding:0;margin-left:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%;flex:0 0 25px;font-size:13px;line-height:25px;z-index:20;}
+.clear-search-btn:hover{background:#e53935;color:#fff;}
+.clear-search-btn:active{background:#c62828;color:#fff;}
+.search-pin-overlay{width:34px;height:42px;position:relative;cursor:pointer;pointer-events:auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));}
+.search-pin-overlay svg{display:block;width:34px;height:42px;pointer-events:none;}
 
 
 /* =========================================================
@@ -3527,6 +3529,8 @@ window.addEventListener("load",function(){
 
     let searchTimer = null;
     let searchMarkerLayer = null;
+    let searchPinOverlay = null;
+    let searchPinElement = null;
     let lastResults = [];
 
     function getMap(){
@@ -3629,6 +3633,52 @@ window.addEventListener("load",function(){
         overlay.setPosition(coordinate);
     }
 
+    function removeSearchPin(){
+        if(searchPinOverlay){
+            const m = getMap();
+            if(m){ m.removeOverlay(searchPinOverlay); }
+            searchPinOverlay = null;
+            searchPinElement = null;
+        }
+    }
+
+    function createSearchPin(coordinate, label, latitude, longitude){
+        const m = getMap();
+        if(!m || !window.ol) return;
+
+        removeSearchPin();
+
+        searchPinElement = document.createElement("div");
+        searchPinElement.className = "search-pin-overlay";
+        searchPinElement.title = "Klik untuk buka / tutup maklumat lokasi";
+        searchPinElement.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 60" aria-hidden="true">' +
+            '<path d="M24 2C11.85 2 2 11.85 2 24c0 16.5 22 34 22 34s22-17.5 22-34C46 11.85 36.15 2 24 2z" fill="#e53935" stroke="#ffffff" stroke-width="3"/>' +
+            '<circle cx="24" cy="24" r="8" fill="#ffffff"/>' +
+            '</svg>';
+
+        searchPinOverlay = new ol.Overlay({
+            element: searchPinElement,
+            positioning: "bottom-center",
+            offset: [0, 0],
+            stopEvent: true
+        });
+        m.addOverlay(searchPinOverlay);
+        searchPinOverlay.setPosition(coordinate);
+
+        searchPinElement.addEventListener("click", function(event){
+            event.preventDefault();
+            event.stopPropagation();
+
+            const isOpen = searchPopupOverlay && searchPopupOverlay.getPosition() !== undefined;
+            if(isOpen){
+                closeSearchPopup();
+            }else{
+                showSearchPopup(coordinate, label, latitude, longitude);
+            }
+        });
+    }
+
     function showSearchMarker(lon, lat, label){
         const m = getMap();
 
@@ -3642,28 +3692,14 @@ window.addEventListener("load",function(){
         if(!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
 
         const layer = ensureSearchMarkerLayer();
-        if(!layer) return;
-
-        const source = layer.getSource();
-        source.clear();
+        if(layer && layer.getSource()){
+            layer.getSource().clear();
+        }
         closeSearchPopup();
+        removeSearchPin();
 
-        const coordinate = ol.proj.fromLonLat([longitude,latitude]);
-
-        const feature = new ol.Feature({
-            geometry: new ol.geom.Point(coordinate),
-            searchLabel: label,
-            searchLatitude: latitude,
-            searchLongitude: longitude
-        });
-        feature.set("searchData", {
-            coordinate: coordinate,
-            name: label,
-            lat: latitude,
-            lon: longitude
-        });
-
-        source.addFeature(feature);
+        const coordinate = ol.proj.fromLonLat([longitude, latitude]);
+        createSearchPin(coordinate, label, latitude, longitude);
 
         const view = m.getView();
         view.animate({
@@ -3672,7 +3708,6 @@ window.addEventListener("load",function(){
             duration: 700
         });
 
-        // Popup tidak dibuka automatik. Klik pin untuk buka/tutup popup.
         showNotification("Lokasi ditemui: " + label);
     }
 
@@ -3680,6 +3715,7 @@ window.addEventListener("load",function(){
         input.value = "";
         clearSearchResults();
         closeSearchPopup();
+        removeSearchPin();
         if(searchMarkerLayer && searchMarkerLayer.getSource()){
             searchMarkerLayer.getSource().clear();
         }
