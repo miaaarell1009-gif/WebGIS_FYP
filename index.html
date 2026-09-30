@@ -1292,6 +1292,53 @@ body.dark .complaint-status{background:#1c3528;}
     .form-group.full{grid-column:auto;}
 }
 
+
+/* =========================================================
+   MOBILE SIDEBAR HANDLE - RELIABLE TAP
+   ========================================================= */
+@media (max-width:750px){
+    .mobile-sidebar-handle{
+        display:flex !important;
+        position:fixed !important;
+        left:0 !important;
+        top:50% !important;
+        width:38px !important;
+        height:76px !important;
+        transform:translateY(-50%) !important;
+        z-index:20000 !important;
+        pointer-events:auto !important;
+        opacity:1 !important;
+        visibility:visible !important;
+        background:#082e4b !important;
+        border:0 !important;
+        border-radius:0 16px 16px 0 !important;
+        box-shadow:3px 4px 14px rgba(0,0,0,.28) !important;
+        -webkit-tap-highlight-color:transparent !important;
+        touch-action:manipulation !important;
+    }
+
+    .mobile-sidebar-handle i{
+        font-size:20px !important;
+        pointer-events:none !important;
+    }
+
+    .sidebar{
+        z-index:19000 !important;
+        transform:translate3d(-110%,0,0) !important;
+        transition:transform .28s cubic-bezier(.22,.61,.36,1) !important;
+    }
+
+    .sidebar.mobile-show{
+        transform:translate3d(0,0,0) !important;
+    }
+
+    .sidebar.mobile-show + .mobile-sidebar-handle{
+        opacity:0 !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+    }
+}
+
 </style>
 
 <style>
@@ -1347,14 +1394,51 @@ body.dark .complaint-status{background:#1c3528;}
     font-size:11px;
 }
 .search-pin{
-    width:18px;
-    height:18px;
+    width:22px;
+    height:22px;
     border-radius:50% 50% 50% 0;
     transform:rotate(-45deg);
     background:#e53935;
     border:3px solid #fff;
     box-shadow:0 2px 9px rgba(0,0,0,.35);
+    position:relative;
 }
+.search-pin::after{
+    content:"";
+    position:absolute;
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#fff;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+}
+.search-location-popup{
+    min-width:190px;
+    max-width:260px;
+    background:#fff;
+    color:#233746;
+    border-radius:10px;
+    padding:10px 12px;
+    box-shadow:0 5px 20px rgba(0,0,0,.25);
+    border:1px solid #d8e3ea;
+    font-family:Arial,sans-serif;
+    position:relative;
+}
+.search-location-popup::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    bottom:-8px;
+    margin-left:-8px;
+    border-width:8px 8px 0 8px;
+    border-style:solid;
+    border-color:#fff transparent transparent transparent;
+}
+.search-location-popup .popup-title{font-weight:700;font-size:14px;margin-bottom:5px;}
+.search-location-popup .popup-coord{font-size:11px;color:#60717d;line-height:1.5;}
+.search-location-popup .popup-close{position:absolute;right:6px;top:4px;border:0;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:#6b7880;padding:2px 5px;}
 @media(max-width:700px){
     .search-results{left:-25px;right:-25px;}
 }
@@ -1552,7 +1636,7 @@ body.dark .complaint-status{background:#1c3528;}
 </aside>
 
 <!-- Small edge handle for opening the sidebar on phones -->
-<button class="mobile-sidebar-handle" type="button" aria-label="Buka menu" onclick="toggleSidebar()">
+<button class="mobile-sidebar-handle" id="mobileSidebarHandle" type="button" aria-label="Buka menu">
     <i class="fas fa-chevron-right"></i>
 </button>
 
@@ -3110,7 +3194,11 @@ function toggleSidebar(){
 
     if(window.innerWidth <= 750){
 
-        sidebar.classList.toggle("mobile-show");
+        if(sidebar.classList.contains("mobile-show")){
+            closeMobileSidebar();
+        }else{
+            openMobileSidebar();
+        }
 
     }else{
 
@@ -3125,10 +3213,51 @@ function toggleSidebar(){
 
 
 /* =====================================================
+   MOBILE SIDEBAR BUTTON
+   ===================================================== */
+function openMobileSidebar(){
+    const sidebar = document.getElementById("sidebar");
+    if(!sidebar || window.innerWidth > 750) return;
+
+    sidebar.classList.add("mobile-show");
+    sidebar.setAttribute("aria-hidden","false");
+}
+
+function closeMobileSidebar(){
+    const sidebar = document.getElementById("sidebar");
+    if(!sidebar || window.innerWidth > 750) return;
+
+    sidebar.classList.remove("mobile-show");
+    sidebar.setAttribute("aria-hidden","true");
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+    const handle = document.getElementById("mobileSidebarHandle");
+    const sidebar = document.getElementById("sidebar");
+
+    if(handle){
+        handle.addEventListener("click", function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            openMobileSidebar();
+        });
+        handle.addEventListener("touchend", function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            openMobileSidebar();
+        }, {passive:false});
+    }
+
+    if(sidebar){
+        sidebar.setAttribute("aria-hidden",
+            sidebar.classList.contains("mobile-show") ? "false" : "true"
+        );
+    }
+});
+
+/* =====================================================
    MOBILE SWIPE SIDEBAR
    Swipe left on the open sidebar to close.
-   Opening is done with the small edge arrow to avoid
-   triggering the browser back gesture on iPhone/Safari.
 ===================================================== */
 (function(){
     let touchStartX = 0;
@@ -3169,7 +3298,7 @@ function toggleSidebar(){
         if(Math.abs(dx) < SWIPE_DISTANCE || Math.abs(dx) < Math.abs(dy) * 1.25) return;
 
         if(dx < 0){
-            sidebar.classList.remove("mobile-show");
+            closeMobileSidebar();
         }
     }, {passive:true});
 })();
@@ -3417,6 +3546,9 @@ window.addEventListener("load",function(){
         lastResults = [];
     }
 
+    let searchPopupOverlay = null;
+    let searchPopupElement = null;
+
     function ensureSearchMarkerLayer(){
         const m = getMap();
         if(!m || !window.ol) return null;
@@ -3429,10 +3561,17 @@ window.addEventListener("load",function(){
             source: source,
             zIndex: 10001,
             style: new ol.style.Style({
-                image: new ol.style.Circle({
-                    radius: 8,
-                    fill: new ol.style.Fill({color:"#e53935"}),
-                    stroke: new ol.style.Stroke({color:"#ffffff",width:3})
+                image: new ol.style.Icon({
+                    src: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="60" viewBox="0 0 48 60">' +
+                        '<path d="M24 2C11.85 2 2 11.85 2 24c0 16.5 22 34 22 34s22-17.5 22-34C46 11.85 36.15 2 24 2z" fill="#e53935" stroke="#ffffff" stroke-width="3"/>' +
+                        '<circle cx="24" cy="24" r="8" fill="#ffffff"/>' +
+                        '</svg>'
+                    ),
+                    anchor:[0.5,1],
+                    anchorXUnits:"fraction",
+                    anchorYUnits:"fraction",
+                    scale:0.72
                 })
             })
         });
@@ -3443,6 +3582,50 @@ window.addEventListener("load",function(){
         return searchMarkerLayer;
     }
 
+    function closeSearchPopup(){
+        if(searchPopupOverlay){
+            searchPopupOverlay.setPosition(undefined);
+        }
+    }
+
+    function ensureSearchPopup(){
+        const m = getMap();
+        if(!m || !window.ol) return null;
+        if(searchPopupOverlay) return searchPopupOverlay;
+
+        searchPopupElement = document.createElement("div");
+        searchPopupElement.className = "search-location-popup";
+        searchPopupElement.innerHTML =
+            '<button class="popup-close" type="button" aria-label="Tutup">×</button>' +
+            '<div class="popup-title"></div>' +
+            '<div class="popup-coord"></div>';
+
+        searchPopupElement.querySelector(".popup-close").addEventListener("click", closeSearchPopup);
+
+        searchPopupOverlay = new ol.Overlay({
+            element:searchPopupElement,
+            autoPan:{animation:{duration:250}},
+            positioning:"bottom-center",
+            offset:[0,-12],
+            stopEvent:true
+        });
+        m.addOverlay(searchPopupOverlay);
+        return searchPopupOverlay;
+    }
+
+    function showSearchPopup(coordinate,label,lat,lon){
+        const m = getMap();
+        const overlay = ensureSearchPopup();
+        if(!m || !overlay) return;
+
+        searchPopupElement.querySelector(".popup-title").textContent = label || "Lokasi carian";
+        searchPopupElement.querySelector(".popup-coord").innerHTML =
+            "Latitude: " + Number(lat).toFixed(6) + "<br>" +
+            "Longitude: " + Number(lon).toFixed(6);
+
+        overlay.setPosition(coordinate);
+    }
+
     function showSearchMarker(lon, lat, label){
         const m = getMap();
 
@@ -3451,31 +3634,38 @@ window.addEventListener("load",function(){
             return;
         }
 
+        const longitude = Number(lon);
+        const latitude = Number(lat);
+        if(!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
+
         const layer = ensureSearchMarkerLayer();
         if(!layer) return;
 
         const source = layer.getSource();
         source.clear();
+        closeSearchPopup();
 
-        const coordinate = ol.proj.fromLonLat([
-            Number(lon),
-            Number(lat)
-        ]);
+        const coordinate = ol.proj.fromLonLat([longitude,latitude]);
 
         const feature = new ol.Feature({
             geometry: new ol.geom.Point(coordinate),
-            searchLabel: label
+            searchLabel: label,
+            searchLatitude: latitude,
+            searchLongitude: longitude
         });
 
         source.addFeature(feature);
 
         const view = m.getView();
-
         view.animate({
             center: coordinate,
-            zoom: Math.max(Number(view.getZoom()) || 10, 15),
-            duration: 900
+            zoom: Math.max(Number(view.getZoom()) || 10, 16),
+            duration: 700
         });
+
+        setTimeout(function(){
+            showSearchPopup(coordinate,label,latitude,longitude);
+        },750);
 
         showNotification("Lokasi ditemui: " + label);
     }
@@ -3536,11 +3726,14 @@ window.addEventListener("load",function(){
 
                 if(coords && coords.length >= 2){
                     input.value = info.title;
-                    showSearchMarker(
-                        coords[0],
-                        coords[1],
-                        info.title
-                    );
+                    showPageById("map-page");
+                    setTimeout(function(){
+                        showSearchMarker(
+                            coords[0],
+                            coords[1],
+                            info.title
+                        );
+                    },350);
                 }
 
                 clearSearchResults();
@@ -3552,7 +3745,7 @@ window.addEventListener("load",function(){
         resultsBox.classList.add("show");
     }
 
-    async function searchPlace(query){
+    async function searchPlace(query,autoSelect){
 
         const clean = query.trim();
 
@@ -3604,6 +3797,20 @@ window.addEventListener("load",function(){
 
             renderResults(features);
 
+            if(autoSelect && features.length){
+                const feature = features[0];
+                const info = resultLabel(feature);
+                const coords = feature.geometry && feature.geometry.coordinates;
+                if(coords && coords.length >= 2){
+                    input.value = info.title;
+                    showPageById("map-page");
+                    setTimeout(function(){
+                        showSearchMarker(coords[0],coords[1],info.title);
+                    },350);
+                }
+                clearSearchResults();
+            }
+
         }catch(error){
 
             console.error("Carian kawasan gagal:", error);
@@ -3641,7 +3848,7 @@ window.addEventListener("load",function(){
             const value = this.value.trim();
 
             if(value){
-                searchPlace(value);
+                searchPlace(value, true);
             }
         }
 
@@ -3657,6 +3864,23 @@ window.addEventListener("load",function(){
         }
 
     });
+
+    // Tutup popup apabila pengguna klik kawasan lain pada peta.
+    const mapPopupCloser = setInterval(function(){
+        const m = getMap();
+        if(m && !window._searchPopupClickBound){
+            m.on("singleclick",function(evt){
+                if(searchPopupOverlay){
+                    const hit = m.hasFeatureAtPixel(evt.pixel, {
+                        layerFilter:function(layer){ return layer === searchMarkerLayer; }
+                    });
+                    if(!hit) closeSearchPopup();
+                }
+            });
+            window._searchPopupClickBound = true;
+            clearInterval(mapPopupCloser);
+        }
+    },500);
 
 })();
 
