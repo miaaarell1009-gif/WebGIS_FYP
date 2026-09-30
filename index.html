@@ -3871,33 +3871,56 @@ window.addEventListener("load",function(){
 
     });
 
-    // Tutup popup apabila pengguna klik kawasan lain pada peta.
+    /* =====================================================
+       CLICK PIN = TOGGLE POPUP
+       Klik pin sekali -> popup buka
+       Klik pin lagi -> popup tutup
+       Klik tempat lain -> popup tutup
+    ===================================================== */
     const mapPopupCloser = setInterval(function(){
         const m = getMap();
         if(m && !window._searchPopupClickBound){
             m.on("singleclick",function(evt){
-                const hit = m.forEachFeatureAtPixel(evt.pixel, function(feature){
-                    return feature && feature.get("searchData") ? feature : null;
+
+                let hit = null;
+
+                // Cari hanya feature daripada layer pin carian kita.
+                m.forEachFeatureAtPixel(evt.pixel, function(feature, layer){
+                    if(layer === searchMarkerLayer && feature && feature.get("searchData")){
+                        hit = feature;
+                        return true;
+                    }
+                    return false;
+                }, {
+                    hitTolerance: 14
                 });
 
                 if(hit){
-                    // Klik pin: popup ON/OFF
-                    if(searchPopupOverlay && searchPopupOverlay.getPosition()){
+                    const data = hit.get("searchData");
+                    const isOpen = searchPopupOverlay &&
+                                   searchPopupOverlay.getPosition() !== undefined;
+
+                    if(isOpen){
                         closeSearchPopup();
                     }else{
-                        const data = hit.get("searchData");
-                        showSearchPopup(data.coordinate, data.name, data.lat, data.lon);
+                        showSearchPopup(
+                            data.coordinate,
+                            data.name,
+                            data.lat,
+                            data.lon
+                        );
                     }
                     return;
                 }
 
-                // Klik tempat lain pada peta: tutup popup sahaja.
+                // Klik kawasan lain pada peta: popup tutup.
                 closeSearchPopup();
             });
+
             window._searchPopupClickBound = true;
             clearInterval(mapPopupCloser);
         }
-    },500);
+    },300);
 
 })();
 
