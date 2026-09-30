@@ -954,6 +954,10 @@ input{
 
     font-size:12px;
 }
+.clear-search-btn{border:0;background:transparent;color:#8c99a4;width:28px;height:28px;padding:0;margin-left:2px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%;flex:0 0 28px;}
+.clear-search-btn:hover{background:#eef2f5;color:#d32f2f;}
+.clear-search-btn:active{background:#e3e8ec;}
+
 
 /* =========================================================
    NOTIFICATION
@@ -1482,6 +1486,7 @@ body.dark .complaint-status{background:#1c3528;}
                 type="text"
                 id="searchInput"
                 placeholder="Cari kawasan...">
+            <button type="button" id="clearSearchButton" class="clear-search-btn" title="Padam carian" aria-label="Padam carian"><i class="fas fa-times"></i></button>
             <div id="searchResults" class="search-results" role="listbox" aria-label="Hasil carian kawasan"></div>
         </div>
 
@@ -3516,6 +3521,7 @@ window.addEventListener("load",function(){
 
     const input = document.getElementById("searchInput");
     const resultsBox = document.getElementById("searchResults");
+    const clearSearchButton = document.getElementById("clearSearchButton");
 
     if(!input || !resultsBox) return;
 
@@ -3596,11 +3602,8 @@ window.addEventListener("load",function(){
         searchPopupElement = document.createElement("div");
         searchPopupElement.className = "search-location-popup";
         searchPopupElement.innerHTML =
-            '<button class="popup-close" type="button" aria-label="Tutup">×</button>' +
             '<div class="popup-title"></div>' +
             '<div class="popup-coord"></div>';
-
-        searchPopupElement.querySelector(".popup-close").addEventListener("click", closeSearchPopup);
 
         searchPopupOverlay = new ol.Overlay({
             element:searchPopupElement,
@@ -3669,11 +3672,26 @@ window.addEventListener("load",function(){
             duration: 700
         });
 
-        setTimeout(function(){
-            showSearchPopup(coordinate,label,latitude,longitude);
-        },750);
-
+        // Popup tidak dibuka automatik. Klik pin untuk buka/tutup popup.
         showNotification("Lokasi ditemui: " + label);
+    }
+
+    function clearSearchLocation(){
+        input.value = "";
+        clearSearchResults();
+        closeSearchPopup();
+        if(searchMarkerLayer && searchMarkerLayer.getSource()){
+            searchMarkerLayer.getSource().clear();
+        }
+    }
+
+    if(clearSearchButton){
+        clearSearchButton.addEventListener("click",function(event){
+            event.preventDefault();
+            event.stopPropagation();
+            clearSearchLocation();
+            input.focus();
+        });
     }
 
     function resultLabel(feature){
