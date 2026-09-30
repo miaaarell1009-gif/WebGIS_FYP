@@ -3430,45 +3430,35 @@ function toggleFullscreen(){
 ===================================================== */
 
 function resetMap(){
-
     try{
-
         if(typeof map !== "undefined" && map){
+            const view = map.getView();
+            const center = window._qgis2webInitialCenter;
+            const zoom = Number(window._qgis2webInitialZoom);
 
-            const view =
-                map.getView();
-
-            if(window._qgis2webInitialCenter && window._qgis2webInitialZoom){
-                view.setCenter(window._qgis2webInitialCenter);
-                view.setZoom(window._qgis2webInitialZoom);
+            if(Array.isArray(center) && center.length >= 2 && Number.isFinite(zoom)){
+                view.animate({
+                    center:center,
+                    zoom:zoom,
+                    duration:700
+                });
             }else{
-                view.setZoom(11);
+                view.animate({
+                    zoom:11,
+                    duration:700
+                });
             }
 
             map.updateSize();
-
-            showNotification(
-                "Paparan peta telah direset"
-            );
-
+            showNotification("Paparan kawasan kajian telah dipulihkan");
         }else{
-
-            showNotification(
-                "Peta sedang dimuatkan..."
-            );
-
+            showNotification("Peta sedang dimuatkan...");
         }
-
     }catch(error){
-
-        showNotification(
-            "Tidak dapat reset peta"
-        );
-
+        console.error("Reset peta gagal:", error);
+        showNotification("Tidak dapat reset peta");
     }
-
 }
-
 
 /* =====================================================
    NOTIFICATION
@@ -3614,7 +3604,7 @@ window.addEventListener("load",function(){
             element:searchPopupElement,
             autoPan:{animation:{duration:250}},
             positioning:"bottom-center",
-            offset:[0,-12],
+            offset:[0,-42],
             stopEvent:true
         });
         m.addOverlay(searchPopupOverlay);
@@ -3720,6 +3710,18 @@ window.addEventListener("load",function(){
         removeSearchPin();
         if(searchMarkerLayer && searchMarkerLayer.getSource()){
             searchMarkerLayer.getSource().clear();
+        }
+
+        const m = getMap();
+        if(m){
+            showPageById("map-page");
+            setTimeout(function(){
+                if(typeof resetMap === "function"){
+                    resetMap();
+                }else{
+                    m.getView().animate({zoom:11,duration:700});
+                }
+            },100);
         }
     }
 
