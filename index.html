@@ -3653,6 +3653,12 @@ window.addEventListener("load",function(){
             searchLatitude: latitude,
             searchLongitude: longitude
         });
+        feature.set("searchData", {
+            coordinate: coordinate,
+            name: label,
+            lat: latitude,
+            lon: longitude
+        });
 
         source.addFeature(feature);
 
@@ -3870,12 +3876,23 @@ window.addEventListener("load",function(){
         const m = getMap();
         if(m && !window._searchPopupClickBound){
             m.on("singleclick",function(evt){
-                if(searchPopupOverlay){
-                    const hit = m.hasFeatureAtPixel(evt.pixel, {
-                        layerFilter:function(layer){ return layer === searchMarkerLayer; }
-                    });
-                    if(!hit) closeSearchPopup();
+                const hit = m.forEachFeatureAtPixel(evt.pixel, function(feature){
+                    return feature && feature.get("searchData") ? feature : null;
+                });
+
+                if(hit){
+                    // Klik pin: popup ON/OFF
+                    if(searchPopupOverlay && searchPopupOverlay.getPosition()){
+                        closeSearchPopup();
+                    }else{
+                        const data = hit.get("searchData");
+                        showSearchPopup(data.coordinate, data.name, data.lat, data.lon);
+                    }
+                    return;
                 }
+
+                // Klik tempat lain pada peta: tutup popup sahaja.
+                closeSearchPopup();
             });
             window._searchPopupClickBound = true;
             clearInterval(mapPopupCloser);
